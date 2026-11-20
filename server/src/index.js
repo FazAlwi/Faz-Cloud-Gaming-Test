@@ -48,7 +48,31 @@ export function createApp() {
   return app;
 }
 
+async function resolveAutoPublicHost() {
+  if (config.publicHost !== 'auto') return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const res = await fetch(
+      'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip',
+      { headers: { 'Metadata-Flavor': 'Google' }, signal: controller.signal }
+    );
+    if (res.ok) {
+      const ip = (await res.text()).trim();
+      if (ip) {
+        config.publicHost = ip;
+        console.log(`[Server] Auto-detected GCP external IP: ${ip}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[Server] Failed to auto-detect GCP external IP (${err.message}); keeping PUBLIC_HOST="${config.publicHost}".`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function bootstrap(port = config.port) {
+  await resolveAutoPublicHost();
   await sessionStore.init();
   startSessionReaper();
 
@@ -57,7 +81,7 @@ export async function bootstrap(port = config.port) {
     const address = server.address();
     const listeningPort = typeof address === 'object' && address ? address.port : port;
     console.log(
-      `[Server] Cloud Gaming API listening on http://localhost:${listeningPort} (MOCK_DOCKER=${config.mockDocker}, MAX_SLOTS=${config.maxSlots}, store=${sessionStore.getBackendName()})`
+      `[Server] Cloud Gaming API listening on http://localhost:${listeningPort} (MOCK_DOCKER=${config.mockDocker}, MAX_SLOTS=${config.maxSlots}, PUBLIC_HOST=${config.publicHost}, store=${sessionStore.getBackendName()})`
     );
   });
 

@@ -90,3 +90,15 @@ export async function sendHeartbeat(userId: string): Promise<{ ok: boolean; last
     body: JSON.stringify({ userId }),
   });
 }
+
+export async function wakeVm(): Promise<{
+  ok: boolean;
+  vmStatus: string;
+  externalIp?: string | null;
+  backendReady?: boolean;
+}> {
+  return request('/api/vm/start', {
+    method: 'POST',
+    body: JSON.stringify({ wait: true }),
+  });
+}

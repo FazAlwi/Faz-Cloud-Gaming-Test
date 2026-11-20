@@ -6,11 +6,12 @@ import {
   fetchUserSession,
   startSession,
   stopSession,
+  wakeVm,
 } from './lib/api';
 import type { CloudSession, Game, HealthStatus } from './types';
 import { TopNav } from './components/TopNav';
 import { GameLibrary } from './components/GameLibrary';
-import { SessionBootModal } from './components/SessionBootModal';
+import { BOOT_STEPS, SessionBootModal, VM_WAKE_BOOT_STEPS } from './components/SessionBootModal';
 import { StreamView } from './components/StreamView';
 
 const NICKNAME_STORAGE_KEY = 'fazcloud:nickname';
@@ -47,11 +48,13 @@ export function App() {
     open: boolean;
     title: string;
     step: number;
+    steps: readonly string[];
     error: string | null;
   }>({
     open: false,
     title: '',
     step: 0,
+    steps: BOOT_STEPS,
     error: null,
   });
 
@@ -130,33 +133,63 @@ export function App() {
         open: true,
         title,
         step: 0,
+        steps: BOOT_STEPS,
         error: 'Please enter a nickname (at least 2 characters) in the top-right bar before launching.',
       });
       return;
     }
 
-    setBootState({ open: true, title, step: 0, error: null });
+    const needsVmWake =
+      health?.vmControlEnabled &&
+      (health.status === 'sleeping' || health.status === 'starting');
+    const activeSteps = needsVmWake ? VM_WAKE_BOOT_STEPS : BOOT_STEPS;
+    const offset = needsVmWake ? 1 : 0;
+
+    setBootState({ open: true, title, step: 0, steps: activeSteps, error: null });
 
     try {
+      if (needsVmWake) {
+        await wakeVm();
+        setBootState({ open: true, title, step: 1, steps: activeSteps, error: null });
+      }
+
       // Step 1: Allocating GPU container slot...
       const startPromise = startSession(trimmedUser, gameId);
       await sleep(550);
       const { session } = await startPromise;
 
       // Step 2: Mounting save volume & initializing Proton...
-      setBootState({ open: true, title: session.gameTitle, step: 1, error: null });
+      setBootState({
+        open: true,
+        title: session.gameTitle,
+        step: offset + 1,
+        steps: activeSteps,
+        error: null,
+      });
       await sleep(600);
 
       // Step 3: Connecting low-latency WebRTC stream...
-      setBootState({ open: true, title: session.gameTitle, step: 2, error: null });
+      setBootState({
+        open: true,
+        title: session.gameTitle,
+        step: offset + 2,
+        steps: activeSteps,
+        error: null,
+      });
       await sleep(550);
 
-      setBootState({ open: true, title: session.gameTitle, step: 3, error: null });
+      setBootState({
+        open: true,
+        title: session.gameTitle,
+        step: offset + 3,
+        steps: activeSteps,
+        error: null,
+      });
       await sleep(220);
 
       setExistingSession(session);
       setActiveStream(session);
-      setBootState({ open: false, title: '', step: 0, error: null });
+      setBootState({ open: false, title: '', step: 0, steps: BOOT_STEPS, error: null });
       refreshHealth();
     } catch (err) {
       const message =
@@ -165,7 +198,7 @@ export function App() {
           : err instanceof Error
             ? err.message
             : 'Unexpected error launching session.';
-      setBootState({ open: true, title, step: 0, error: message });
+      setBootState({ open: true, title, step: 0, steps: activeSteps, error: message });
       refreshHealth();
     }
   };
@@ -222,8 +255,11 @@ export function App() {
         <SessionBootModal
           title={bootState.title}
           currentStep={bootState.step}
+          steps={bootState.steps}
           error={bootState.error}
-          onDismissError={() => setBootState({ open: false, title: '', step: 0, error: null })}
+          onDismissError={() =>
+            setBootState({ open: false, title: '', step: 0, steps: BOOT_STEPS, error: null })
+          }
         />
       )}
     </div>

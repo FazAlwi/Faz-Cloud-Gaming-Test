@@ -6,9 +6,15 @@ export const BOOT_STEPS = [
   'Connecting low-latency WebRTC stream...',
 ] as const;
 
+export const VM_WAKE_BOOT_STEPS = [
+  'Waking NVIDIA L4 VM (~30–45s)...',
+  ...BOOT_STEPS,
+] as const;
+
 interface SessionBootModalProps {
   title: string;
-  currentStep: number; // 0, 1, 2, or 3 (all complete)
+  currentStep: number;
+  steps?: readonly string[];
   error: string | null;
   onDismissError: () => void;
 }
@@ -16,6 +22,7 @@ interface SessionBootModalProps {
 export function SessionBootModal({
   title,
   currentStep,
+  steps = BOOT_STEPS,
   error,
   onDismissError,
 }: SessionBootModalProps) {
@@ -59,7 +66,7 @@ export function SessionBootModal({
             </h2>
 
             <ol className="mt-7 space-y-4">
-              {BOOT_STEPS.map((label, index) => {
+              {steps.map((label, index) => {
                 const isDone = currentStep > index;
                 const isActive = currentStep === index;
 

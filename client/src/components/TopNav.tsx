@@ -21,6 +21,8 @@ export function TopNav({
   const active = health?.activeSessions ?? 0;
   const maxSlots = health?.maxSlots ?? 2;
   const isFull = active >= maxSlots;
+  const isVmSleeping = health?.status === 'sleeping';
+  const isVmStarting = health?.status === 'starting';
   const regionLabel = health?.regionLabel ?? 'Singapore';
   const regionCode = health?.region ?? 'asia-southeast1';
   const pingDisplay = latencyMs !== null ? `~${latencyMs}ms` : '~5ms';
@@ -71,18 +73,36 @@ export function TopNav({
             className="inline-flex items-center gap-2 rounded-lg border border-[#1E293B] bg-[#131926] px-3 py-1.5 font-mono text-xs text-[#CBD5E1]"
             title={
               health
-                ? `${health.gpu} • ${health.mockDocker ? 'Mock Mode' : 'Live Docker'}`
+                ? `${health.gpu} • ${
+                    isVmSleeping
+                      ? 'GPU VM Sleeping (auto-wakes on Play)'
+                      : isVmStarting
+                        ? 'GPU VM Starting...'
+                        : health.mockDocker
+                          ? 'Mock Mode'
+                          : 'Live Docker'
+                  }`
                 : 'Checking server capacity...'
             }
           >
             <span
               className={`h-2 w-2 rounded-full ${
-                !health ? 'bg-[#64748B]' : isFull ? 'bg-amber-400' : 'bg-emerald-400'
+                !health
+                  ? 'bg-[#64748B]'
+                  : isVmStarting
+                    ? 'animate-pulse bg-[#22D3EE]'
+                    : isVmSleeping || isFull
+                      ? 'bg-amber-400'
+                      : 'bg-emerald-400'
               }`}
             />
             <Server className="hidden h-3.5 w-3.5 text-[#64748B] sm:block" />
             <span>
-              {active} / {maxSlots} Slots Active
+              {isVmSleeping
+                ? 'GPU Asleep (Auto-Wake)'
+                : isVmStarting
+                  ? 'Waking GPU VM...'
+                  : `${active} / ${maxSlots} Slots Active`}
             </span>
           </div>
 

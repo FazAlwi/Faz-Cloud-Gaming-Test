@@ -1,0 +1,14 @@
+{
+  "name": "faz-cloud-gaming-control-plane",
+  "version": "1.0.0",
+  "description": "Cloud Run frontend host, API proxy, and on-demand GCP GPU VM wake/sleep controller",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

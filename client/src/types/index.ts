@@ -19,6 +19,8 @@ export interface HealthStatus {
   mockDocker: boolean;
   storeBackend: 'redis' | 'memory';
   uptimeSeconds: number;
+  vmStatus?: string;
+  vmControlEnabled?: boolean;
 }
 
 export interface CloudSession {
