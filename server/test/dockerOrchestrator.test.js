@@ -67,9 +67,24 @@ test('passes NVIDIA zero-copy NVENC env vars, /dev/dri device, GPU DeviceRequest
     udpRange: orchestrator.computeWebRtcUdpRange(8081),
   });
 
-  assert.ok(containerConfig.Env.includes('NVIDIA_DRIVER_CAPABILITIES=all'));
+  assert.ok(
+    containerConfig.Env.includes(
+      'NVIDIA_DRIVER_CAPABILITIES=all,graphics,utility,compute,video,display'
+    )
+  );
   assert.ok(containerConfig.Env.includes('NVIDIA_VISIBLE_DEVICES=all'));
   assert.ok(containerConfig.Env.includes('AUTO_GPU=nvidia'));
+  assert.ok(containerConfig.Env.includes('__NV_PRIME_RENDER_OFFLOAD=1'));
+  assert.ok(containerConfig.Env.includes('__GLX_VENDOR_LIBRARY_NAME=nvidia'));
+  assert.ok(containerConfig.Env.includes('__VK_LAYER_NV_optimus=NVIDIA_only'));
+  assert.ok(
+    containerConfig.Env.includes(
+      'VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json:/etc/vulkan/icd.d/nvidia_icd.json'
+    )
+  );
+  assert.ok(containerConfig.Env.includes('PROTON_ENABLE_NVAPI=1'));
+  assert.ok(containerConfig.Env.includes('PROTON_HIDE_NVIDIA_GPU=0'));
+  assert.ok(containerConfig.Env.includes('DXVK_ENABLE_NVAPI=1'));
   assert.ok(containerConfig.Env.includes('SELKIES_VIDEO_STREAMING_MODE=true'));
   assert.ok(
     containerConfig.Env.some((entry) => entry.startsWith('SELKIES_ENCODER=')),
@@ -85,7 +100,15 @@ test('passes NVIDIA zero-copy NVENC env vars, /dev/dri device, GPU DeviceRequest
     {
       Driver: 'nvidia',
       Count: -1,
-      Capabilities: [['gpu']],
+      Capabilities: [
+        ['gpu'],
+        ['nvidia'],
+        ['compute'],
+        ['graphics'],
+        ['utility'],
+        ['video'],
+        ['display'],
+      ],
     },
   ]);
 
@@ -120,6 +143,22 @@ test('passes NVIDIA zero-copy NVENC env vars, /dev/dri device, GPU DeviceRequest
   );
   assert.ok(nvidiaModesetOnlyConfig.Env.includes('PIXELFLUX_WAYLAND=false'));
   assert.ok(nvidiaModesetOnlyConfig.Env.includes('AUTO_GPU=true'));
+
+  const uinputConfig = orchestrator.buildContainerConfig({
+    userId: 'alice',
+    sessionId: 'sess_uinput',
+    game,
+    hostPort: 8081,
+    udpRange: orchestrator.computeWebRtcUdpRange(8081),
+    includeUinput: true,
+  });
+
+  assert.ok(
+    uinputConfig.HostConfig.Devices.some(
+      (d) => d.PathOnHost === '/dev/uinput' && d.PathInContainer === '/dev/uinput'
+    ),
+    '/dev/uinput should be mounted when present on host'
+  );
 });
 
 test('mounts /srv/saves/${safeUserId} to /config:rw and optional shared read-only game library', () => {
@@ -183,6 +222,8 @@ test('injects /custom-cont-init.d/ auto-launch script for Steam games and falls 
     assert.ok(preparedGame.initScriptHostPath && fs.existsSync(preparedGame.initScriptHostPath));
 
     const scriptContent = fs.readFileSync(preparedGame.initScriptHostPath, 'utf8');
+    assert.ok(scriptContent.includes('export __NV_PRIME_RENDER_OFFLOAD=1'));
+    assert.ok(scriptContent.includes('export VK_DRIVER_FILES='));
     assert.ok(scriptContent.includes(`-bigpicture "steam://rungameid/${game.steamAppId}"`));
     assert.ok(scriptContent.includes(`steam -bigpicture "steam://rungameid/${game.steamAppId}"`));
     assert.ok(scriptContent.includes('/defaults/autostart'));

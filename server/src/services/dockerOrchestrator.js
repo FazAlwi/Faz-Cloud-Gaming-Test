@@ -85,6 +85,13 @@ export class DockerOrchestrator {
       '',
       `AUTOSTART_CONTENT=$(cat <<'EOF'`,
       MANAGED_AUTOSTART_MARKER,
+      'export __NV_PRIME_RENDER_OFFLOAD=1',
+      'export __GLX_VENDOR_LIBRARY_NAME=nvidia',
+      'export __VK_LAYER_NV_optimus=NVIDIA_only',
+      'export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json:/etc/vulkan/icd.d/nvidia_icd.json',
+      'export PROTON_ENABLE_NVAPI=1',
+      'export PROTON_HIDE_NVIDIA_GPU=0',
+      'export DXVK_ENABLE_NVAPI=1',
       'if [ -x /usr/bin/wrapped-steam ]; then',
       `  /usr/bin/wrapped-steam -bigpicture "steam://rungameid/${safeAppId}"`,
       'else',
@@ -188,6 +195,7 @@ export class DockerOrchestrator {
     mountSharedGames = Boolean(gamesBaseDir),
     includeDri = true,
     includeNvidiaModeset = false,
+    includeUinput = false,
   }) {
     const safeUserId = sanitizeUserId(userId);
     if (!safeUserId) {
@@ -234,6 +242,14 @@ export class DockerOrchestrator {
       });
     }
 
+    if (includeUinput) {
+      devices.push({
+        PathOnHost: '/dev/uinput',
+        PathInContainer: '/dev/uinput',
+        CgroupPermissions: 'rwm',
+      });
+    }
+
     // Per-user persistent /config volume (Steam login token, Proton prefixes, saves)
     const binds = [`${savePath}:/config:rw`];
 
@@ -258,9 +274,16 @@ export class DockerOrchestrator {
         `PGID=${config.pgid}`,
         `TZ=${config.tz}`,
         `PIXELFLUX_WAYLAND=${config.pixelfluxWayland ? 'true' : 'false'}`,
-        'NVIDIA_DRIVER_CAPABILITIES=all',
+        'NVIDIA_DRIVER_CAPABILITIES=all,graphics,utility,compute,video,display',
         'NVIDIA_VISIBLE_DEVICES=all',
         `AUTO_GPU=${resolvedAutoGpu}`,
+        '__NV_PRIME_RENDER_OFFLOAD=1',
+        '__GLX_VENDOR_LIBRARY_NAME=nvidia',
+        '__VK_LAYER_NV_optimus=NVIDIA_only',
+        'VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json:/etc/vulkan/icd.d/nvidia_icd.json',
+        'PROTON_ENABLE_NVAPI=1',
+        'PROTON_HIDE_NVIDIA_GPU=0',
+        'DXVK_ENABLE_NVAPI=1',
         'SELKIES_VIDEO_STREAMING_MODE=true',
         `SELKIES_ENCODER=${config.selkiesEncoder}`,
         `SELKIES_VIDEO_BITRATE=${config.selkiesVideoBitrate}`,
@@ -287,12 +310,20 @@ export class DockerOrchestrator {
       HostConfig: {
         // Required on Ubuntu 24.04 so Steam's bubblewrap sandbox runs natively instead of proot-bwrap
         SecurityOpt: ['seccomp=unconfined', 'apparmor=unconfined'],
-        // Equivalent to `--gpus all`
+        // Explicitly pass all GPU capabilities required for Vulkan / 3D gaming + NVENC encoding
         DeviceRequests: [
           {
             Driver: 'nvidia',
             Count: -1,
-            Capabilities: [['gpu']],
+            Capabilities: [
+              ['gpu'],
+              ['nvidia'],
+              ['compute'],
+              ['graphics'],
+              ['utility'],
+              ['video'],
+              ['display'],
+            ],
           },
         ],
         // Expose /dev/dri so NVENC, Vulkan, and Proton initialize cleanly on NVIDIA L4
@@ -396,6 +427,7 @@ export class DockerOrchestrator {
       mountSharedGames,
       includeDri: fs.existsSync('/dev/dri'),
       includeNvidiaModeset: fs.existsSync('/dev/nvidia-modeset'),
+      includeUinput: fs.existsSync('/dev/uinput'),
     });
 
     const container = await this.docker.createContainer(containerConfig);

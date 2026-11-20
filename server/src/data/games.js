@@ -10,6 +10,15 @@ export const DESKTOP_MODE = {
 
 export const GAMES = [
   {
+    id: 'palworld',
+    title: 'Palworld',
+    genre: 'Open-World Survival Craft',
+    vramGb: 8,
+    coverUrl: '/covers/palworld.jpg',
+    steamAppId: '1623730',
+    description: 'Fight, farm, build and explore alongside mysterious creatures called "Pals" in a vast open world.',
+  },
+  {
     id: 'cyber-drift-2089',
     title: 'Cyber Drift 2089',
     genre: 'Action RPG',
