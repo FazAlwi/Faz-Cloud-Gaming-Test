@@ -12,7 +12,7 @@ import { sessionStore } from './services/sessionStore.js';
 import { startSessionReaper, stopSessionReaper } from './services/sessionReaper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientDistDir = path.resolve(__dirname, '../../..', 'client', 'dist');
+const clientDistDir = path.resolve(__dirname, '../..', 'client', 'dist');
 
 export function createApp() {
   const app = express();

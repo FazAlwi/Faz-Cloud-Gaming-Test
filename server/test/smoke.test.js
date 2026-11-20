@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 // Force clean MOCK_DOCKER=true & MAX_SLOTS=2 defaults before importing app modules
 process.env.MOCK_DOCKER = 'true';
@@ -8,6 +11,14 @@ process.env.REDIS_URL = '';
 
 const { createApp } = await import('../src/index.js');
 const { sessionStore } = await import('../src/services/sessionStore.js');
+
+const clientDistIndex = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+  'client',
+  'dist',
+  'index.html'
+);
 
 async function startTestServer() {
   await sessionStore.init();
@@ -34,6 +45,14 @@ test('MOCK_DOCKER=true smoke suite: health, start, capacity 503, heartbeat, and 
   const { server, baseUrl } = await startTestServer();
 
   try {
+    // 0. GET / serves built frontend if client/dist/index.html exists
+    if (fs.existsSync(clientDistIndex)) {
+      const rootRes = await fetch(`${baseUrl}/`);
+      assert.equal(rootRes.status, 200);
+      const rootHtml = await rootRes.text();
+      assert.ok(rootHtml.toLowerCase().includes('<!doctype html>'));
+    }
+
     // 1. GET /api/health
     const healthRes = await fetch(`${baseUrl}/api/health`);
     assert.equal(healthRes.status, 200);
