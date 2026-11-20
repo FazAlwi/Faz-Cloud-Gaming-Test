@@ -29,11 +29,13 @@ export interface CloudSession {
   containerId: string;
   containerName: string;
   port: number;
+  containerPort?: number;
   webrtcUdpRange: string;
   streamUrl: string;
   encoder: string;
   savePath: string;
   gamesPath: string;
+  autoLaunchSteamAppId?: string | null;
   mock: boolean;
   createdAt: number;
   lastHeartbeat: number;

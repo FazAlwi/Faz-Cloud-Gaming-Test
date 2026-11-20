@@ -10,10 +10,19 @@ function parseIntOrDefault(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function parseContainerPort(value, fallback = 3001) {
+  const parsed = parseIntOrDefault(value, fallback);
+  return parsed === 3000 || parsed === 3001 ? parsed : fallback;
+}
+
+const rawStreamProtocol = (process.env.STREAM_PROTOCOL || '').trim();
+const rawGamesBaseDir = process.env.GAMES_BASE_DIR;
+
 export const config = {
   port: parseIntOrDefault(process.env.PORT, 4000),
   publicHost: process.env.PUBLIC_HOST || 'localhost',
-  streamProtocol: process.env.STREAM_PROTOCOL || 'http',
+  streamProtocol: rawStreamProtocol || 'http',
+  streamProtocolExplicit: rawStreamProtocol.length > 0,
   corsOrigin: process.env.CORS_ORIGIN || '*',
 
   region: process.env.REGION || 'asia-southeast1',
@@ -29,16 +38,18 @@ export const config = {
 
   mockDocker: parseBool(process.env.MOCK_DOCKER, true),
   dockerSocketPath: process.env.DOCKER_SOCKET_PATH || '/var/run/docker.sock',
-  selkiesImage:
-    process.env.SELKIES_IMAGE ||
-    'ghcr.io/selkies-project/selkies-gstreamer/nvidia-egl-desktop:latest',
+  selkiesImage: process.env.SELKIES_IMAGE || 'lscr.io/linuxserver/steam:latest',
+  selkiesContainerPort: parseContainerPort(process.env.SELKIES_CONTAINER_PORT, 3001),
   selkiesEncoder: process.env.SELKIES_ENCODER || 'nvh264enc',
   selkiesVideoBitrate: parseIntOrDefault(process.env.SELKIES_VIDEO_BITRATE, 12000),
   selkiesFramerate: parseIntOrDefault(process.env.SELKIES_FRAMERATE, 60),
   protonVersion: process.env.PROTON_VERSION || 'GE-Proton9',
+  puid: parseIntOrDefault(process.env.PUID, 1000),
+  pgid: parseIntOrDefault(process.env.PGID, 1000),
+  tz: process.env.TZ || 'Etc/UTC',
 
   savesBaseDir: process.env.SAVES_BASE_DIR || '/srv/saves',
-  gamesBaseDir: process.env.GAMES_BASE_DIR || '/srv/games',
+  gamesBaseDir: rawGamesBaseDir !== undefined ? rawGamesBaseDir.trim() : '/srv/games',
 
   redisUrl: process.env.REDIS_URL || '',
 
