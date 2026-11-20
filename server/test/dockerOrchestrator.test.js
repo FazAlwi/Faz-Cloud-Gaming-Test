@@ -118,6 +118,8 @@ test('passes NVIDIA zero-copy NVENC env vars, /dev/dri device, GPU DeviceRequest
     ),
     '/dev/nvidia-modeset should be mounted when present on host'
   );
+  assert.ok(nvidiaModesetOnlyConfig.Env.includes('PIXELFLUX_WAYLAND=false'));
+  assert.ok(nvidiaModesetOnlyConfig.Env.includes('AUTO_GPU=true'));
 });
 
 test('mounts /srv/saves/${safeUserId} to /config:rw and optional shared read-only game library', () => {

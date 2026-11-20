@@ -247,6 +247,8 @@ export class DockerOrchestrator {
       binds.push(`${initScriptHostPath}:${CUSTOM_INIT_CONTAINER_PATH}:ro`);
     }
 
+    const resolvedAutoGpu = config.autoGpu || (includeDri ? 'nvidia' : 'true');
+
     return {
       name: containerName,
       Image: selkiesImage,
@@ -255,9 +257,10 @@ export class DockerOrchestrator {
         `PUID=${config.puid}`,
         `PGID=${config.pgid}`,
         `TZ=${config.tz}`,
+        `PIXELFLUX_WAYLAND=${config.pixelfluxWayland ? 'true' : 'false'}`,
         'NVIDIA_DRIVER_CAPABILITIES=all',
         'NVIDIA_VISIBLE_DEVICES=all',
-        'AUTO_GPU=nvidia',
+        `AUTO_GPU=${resolvedAutoGpu}`,
         'SELKIES_VIDEO_STREAMING_MODE=true',
         `SELKIES_ENCODER=${config.selkiesEncoder}`,
         `SELKIES_VIDEO_BITRATE=${config.selkiesVideoBitrate}`,

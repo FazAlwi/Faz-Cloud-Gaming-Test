@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -9,6 +10,9 @@ import { sessionsRouter } from './routes/sessions.js';
 import { mockStreamRouter } from './routes/mockStream.js';
 import { sessionStore } from './services/sessionStore.js';
 import { startSessionReaper, stopSessionReaper } from './services/sessionReaper.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const clientDistDir = path.resolve(__dirname, '../../..', 'client', 'dist');
 
 export function createApp() {
   const app = express();
@@ -27,6 +31,14 @@ export function createApp() {
 
   if (config.mockDocker) {
     app.use('/mock-stream', mockStreamRouter);
+  }
+
+  // Serve built React frontend (/client/dist) directly when present
+  if (fs.existsSync(path.join(clientDistDir, 'index.html'))) {
+    app.use(express.static(clientDistDir));
+    app.get(/^(?!\/api\/|\/mock-stream\/).*/, (_req, res) => {
+      res.sendFile(path.join(clientDistDir, 'index.html'));
+    });
   }
 
   app.use((_req, res) => {

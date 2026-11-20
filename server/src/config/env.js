@@ -43,6 +43,8 @@ export const config = {
   selkiesEncoder: process.env.SELKIES_ENCODER || 'nvh264enc',
   selkiesVideoBitrate: parseIntOrDefault(process.env.SELKIES_VIDEO_BITRATE, 12000),
   selkiesFramerate: parseIntOrDefault(process.env.SELKIES_FRAMERATE, 60),
+  pixelfluxWayland: parseBool(process.env.PIXELFLUX_WAYLAND, false),
+  autoGpu: (process.env.AUTO_GPU || '').trim(),
   protonVersion: process.env.PROTON_VERSION || 'GE-Proton9',
   puid: parseIntOrDefault(process.env.PUID, 1000),
   pgid: parseIntOrDefault(process.env.PGID, 1000),
