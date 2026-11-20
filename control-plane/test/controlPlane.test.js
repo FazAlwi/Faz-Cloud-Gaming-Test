@@ -112,6 +112,7 @@ test('control-plane serves catalog & sleeping health when GPU VM is TERMINATED, 
     const startBody = await startRes.json();
     assert.equal(startCalls, 1);
     assert.equal(startBody.session.sessionId, 'sess_awake');
+    assert.equal(startBody.session.streamUrl, 'https://127.0.0.1:8081');
 
     // 3. Health now proxies live RUNNING status from GPU VM
     const awakeHealth = await (await fetch(`${cpServer.baseUrl}/api/health`)).json();

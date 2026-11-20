@@ -216,6 +216,28 @@ export function createControlPlaneApp(overrides = {}) {
     return res.json({ games: GAMES, desktopMode: DESKTOP_MODE });
   });
 
+  function rewriteStreamUrlWithLiveIp(data, liveIp) {
+    if (!data?.session?.streamUrl || !liveIp) return data;
+    try {
+      const original = data.session.streamUrl;
+      const parsed = new URL(original);
+      parsed.hostname = liveIp;
+      let out = parsed.toString();
+      if (!original.endsWith('/') && out.endsWith('/')) {
+        out = out.slice(0, -1);
+      }
+      return {
+        ...data,
+        session: {
+          ...data.session,
+          streamUrl: out,
+        },
+      };
+    } catch {
+      return data;
+    }
+  }
+
   // Session status — returns null cleanly when GPU VM is asleep
   app.get('/api/sessions/:userId', async (req, res) => {
     try {
@@ -228,7 +250,7 @@ export function createControlPlaneApp(overrides = {}) {
         `/api/sessions/${encodeURIComponent(req.params.userId)}`,
         { timeoutMs: 3000 }
       );
-      return res.status(proxied.status).json(proxied.data);
+      return res.status(proxied.status).json(rewriteStreamUrlWithLiveIp(proxied.data, state.externalIp));
     } catch {
       return res.json({ session: null });
     }
@@ -247,7 +269,7 @@ export function createControlPlaneApp(overrides = {}) {
       if (proxied.status === 201 || proxied.status === 200) {
         lastSessionActivityAt = Date.now();
       }
-      return res.status(proxied.status).json(proxied.data);
+      return res.status(proxied.status).json(rewriteStreamUrlWithLiveIp(proxied.data, readyState.externalIp));
     } catch (err) {
       const status = err.code === 'VM_WAKE_TIMEOUT' ? 504 : 502;
       return res.status(status).json({

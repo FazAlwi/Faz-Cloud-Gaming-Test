@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, Maximize2, Minimize2, Power } from 'lucide-react';
+import { ExternalLink, Loader2, Maximize2, Minimize2, Power } from 'lucide-react';
 import { sendHeartbeat } from '../lib/api';
 import type { CloudSession } from '../types';
 
@@ -202,6 +202,18 @@ export function StreamView({ session, initialLatencyMs, onEndSession }: StreamVi
             <Maximize2 className="h-3.5 w-3.5" />
           )}
         </button>
+
+        {/* Open Stream in Tab (helps when browser requires accepting self-signed certificate) */}
+        <a
+          id="stream-open-tab-btn"
+          href={resolvedStreamUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open stream in a new tab (useful if your browser blocks self-signed HTTPS iframes)"
+          className="inline-flex cursor-pointer items-center justify-center rounded-full p-1.5 text-[#CBD5E1] transition-colors hover:bg-[#1E293B] hover:text-[#F8FAFC]"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
 
         {/* End Session button */}
         <button

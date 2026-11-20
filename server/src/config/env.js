@@ -20,7 +20,7 @@ const rawGamesBaseDir = process.env.GAMES_BASE_DIR;
 
 export const config = {
   port: parseIntOrDefault(process.env.PORT, 4000),
-  publicHost: process.env.PUBLIC_HOST || 'localhost',
+  publicHost: process.env.PUBLIC_HOST || 'auto',
   streamProtocol: rawStreamProtocol || 'http',
   streamProtocolExplicit: rawStreamProtocol.length > 0,
   corsOrigin: process.env.CORS_ORIGIN || '*',
