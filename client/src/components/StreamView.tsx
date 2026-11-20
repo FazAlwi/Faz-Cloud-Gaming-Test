@@ -61,6 +61,21 @@ export function StreamView({ session, initialLatencyMs, onEndSession }: StreamVi
     return () => window.clearInterval(interval);
   }, [session.userId]);
 
+  // Stop session container and auto-stop VM if the user closes or reloads the tab
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        const payload = JSON.stringify({ userId: session.userId });
+        navigator.sendBeacon(
+          '/api/sessions/stop',
+          new Blob([payload], { type: 'application/json' })
+        );
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [session.userId]);
+
   // Listen for optional live telemetry postMessages from stream viewport
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {

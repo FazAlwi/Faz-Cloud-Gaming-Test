@@ -117,6 +117,58 @@ test('control-plane serves catalog & sleeping health when GPU VM is TERMINATED, 
     const awakeHealth = await (await fetch(`${cpServer.baseUrl}/api/health`)).json();
     assert.equal(awakeHealth.status, 'ok');
     assert.equal(awakeHealth.vmStatus, 'RUNNING');
+
+    // 4. Fake endpoint for stopping session on GPU VM
+    let gpuStopRemaining = 0;
+    fakeGpuApp.post('/api/sessions/stop', (req, res) =>
+      res.json({
+        stopped: true,
+        userId: req.body.userId,
+        releasedPort: 8081,
+        activeSessions: gpuStopRemaining,
+      })
+    );
+
+    // 4a. When activeSessions is 1, stopping does NOT shut down the VM
+    gpuStopRemaining = 1;
+    let stopCalls = 0;
+    mockVmController.stopVm = async function () {
+      stopCalls += 1;
+      vmStatus = 'STOPPING';
+      return this.getVmStatus();
+    };
+
+    const stopRes1 = await fetch(`${cpServer.baseUrl}/api/sessions/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: 'player-1' }),
+    });
+    assert.equal(stopRes1.status, 200);
+    const stopBody1 = await stopRes1.json();
+    assert.equal(stopBody1.stopped, true);
+    assert.equal(stopBody1.vmStopped, false);
+    assert.equal(stopCalls, 0);
+
+    // 4b. When activeSessions is 0 (last session ended), it auto-shuts down the VM
+    gpuStopRemaining = 0;
+    const stopRes2 = await fetch(`${cpServer.baseUrl}/api/sessions/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: 'player-2' }),
+    });
+    assert.equal(stopRes2.status, 200);
+    const stopBody2 = await stopRes2.json();
+    assert.equal(stopBody2.stopped, true);
+    assert.equal(stopBody2.vmStopped, true);
+    assert.equal(stopBody2.vmStatus, 'STOPPING');
+    assert.equal(stopCalls, 1);
+
+    // 5. POST /api/vm/stop directly triggers VM shutdown
+    const manualStopRes = await fetch(`${cpServer.baseUrl}/api/vm/stop`, {
+      method: 'POST',
+    });
+    assert.equal(manualStopRes.status, 200);
+    assert.equal(stopCalls, 2);
   } finally {
     await new Promise((r) => cpServer.server.close(r));
     await new Promise((r) => gpuServer.server.close(r));

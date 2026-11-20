@@ -117,18 +117,23 @@ sessionsRouter.post('/stop', async (req, res) => {
     });
   }
 
+  let remainingCount = 0;
   try {
     await dockerOrchestrator.stopSessionContainer(session);
   } finally {
     await sessionStore.deleteSession(userId);
+    remainingCount = await sessionStore.countSessions();
   }
 
-  console.log(`[Sessions] Stopped session ${session.sessionId} for "${userId}" (released port ${session.port}).`);
+  console.log(
+    `[Sessions] Stopped session ${session.sessionId} for "${userId}" (released port ${session.port}, remaining: ${remainingCount}).`
+  );
 
   return res.json({
     stopped: true,
     userId,
     releasedPort: session.port,
+    activeSessions: remainingCount,
   });
 });
 

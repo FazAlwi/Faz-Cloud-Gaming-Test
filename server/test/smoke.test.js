@@ -135,6 +135,7 @@ test('MOCK_DOCKER=true smoke suite: health, start, capacity 503, heartbeat, and 
     const stopBody = await stopRes.json();
     assert.equal(stopBody.stopped, true);
     assert.equal(stopBody.releasedPort, 8081);
+    assert.equal(stopBody.activeSessions, 1);
 
     // Verify slot is freed via /api/health and charlie can now start on port 8081
     const healthAfterStop = await (await fetch(`${baseUrl}/api/health`)).json();

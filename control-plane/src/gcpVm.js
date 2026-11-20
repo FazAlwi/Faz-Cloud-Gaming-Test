@@ -171,30 +171,35 @@ export function createGcpVmController({
 
   async function ensureVmReady({ timeoutMs = 150_000, pollIntervalMs = 3000 } = {}) {
     const deadline = Date.now() + timeoutMs;
-    let state = await getVmStatus();
-
-    if (
-      vmControlEnabled &&
-      (state.vmStatus === 'TERMINATED' ||
-        state.vmStatus === 'STOPPED' ||
-        state.vmStatus === 'SUSPENDED')
-    ) {
-      await startVm();
-    }
+    let startTriggered = false;
 
     while (Date.now() < deadline) {
-      state = await getVmStatus();
+      const state = await getVmStatus();
+
+      if (
+        vmControlEnabled &&
+        !startTriggered &&
+        (state.vmStatus === 'TERMINATED' ||
+          state.vmStatus === 'STOPPED' ||
+          state.vmStatus === 'SUSPENDED')
+      ) {
+        await startVm();
+        startTriggered = true;
+      }
+
       if (state.vmStatus === 'RUNNING' && state.backendUrl) {
         const health = await probeBackendHealth(state.backendUrl, 3000);
         if (health) {
           return { ...state, health, ready: true };
         }
       }
+
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
+    const lastState = await getVmStatus().catch(() => ({ vmStatus: 'UNKNOWN' }));
     const err = new Error(
-      `GPU VM "${vmName || staticHost || 'worker'}" did not become ready within ${Math.round(timeoutMs / 1000)}s (last status: ${state.vmStatus}).`
+      `GPU VM "${vmName || staticHost || 'worker'}" did not become ready within ${Math.round(timeoutMs / 1000)}s (last status: ${lastState.vmStatus}).`
     );
     err.code = 'VM_WAKE_TIMEOUT';
     throw err;

@@ -57,5 +57,5 @@ export const config = {
 
   reaperIntervalMs: parseIntOrDefault(process.env.REAPER_INTERVAL_MS, 60_000),
   idleTimeoutMs: parseIntOrDefault(process.env.IDLE_TIMEOUT_MS, 600_000),
-  autoStopVmIdleMs: parseIntOrDefault(process.env.AUTO_STOP_VM_IDLE_MS, 0),
+  autoStopVmIdleMs: parseIntOrDefault(process.env.AUTO_STOP_VM_IDLE_MS, 600_000),
 };

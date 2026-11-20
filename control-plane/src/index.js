@@ -13,6 +13,11 @@ function parseIntOrDefault(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function parseBool(value, fallback) {
+  if (value === undefined || value === '') return fallback;
+  return String(value).toLowerCase() === 'true';
+}
+
 export function createControlPlaneApp(overrides = {}) {
   const cfg = {
     gcpProject: overrides.gcpProject ?? (process.env.GCP_PROJECT || '').trim(),
@@ -25,6 +30,10 @@ export function createControlPlaneApp(overrides = {}) {
     regionLabel: overrides.regionLabel ?? (process.env.REGION_LABEL || 'Singapore'),
     gpuModel: overrides.gpuModel ?? (process.env.GPU_MODEL || 'NVIDIA L4 (24GB)'),
     maxSlots: overrides.maxSlots ?? parseIntOrDefault(process.env.MAX_SLOTS, 2),
+    autoStopOnSessionEnd:
+      overrides.autoStopOnSessionEnd ?? parseBool(process.env.AUTO_STOP_ON_SESSION_END, true),
+    autoStopVmIdleMs:
+      overrides.autoStopVmIdleMs ?? parseIntOrDefault(process.env.AUTO_STOP_VM_IDLE_MS, 600_000),
   };
 
   const vmController =
@@ -37,6 +46,8 @@ export function createControlPlaneApp(overrides = {}) {
       staticUrl: cfg.gpuVmUrl,
       vmPort: cfg.gpuVmPort,
     });
+
+  let lastSessionActivityAt = Date.now();
 
   const app = express();
   app.use(express.json());
@@ -150,9 +161,11 @@ export function createControlPlaneApp(overrides = {}) {
       const derivedStatus =
         state.vmStatus === 'TERMINATED' || state.vmStatus === 'STOPPED' || state.vmStatus === 'SUSPENDED'
           ? 'sleeping'
-          : state.vmStatus === 'PROVISIONING' || state.vmStatus === 'STAGING' || state.vmStatus === 'RUNNING'
-            ? 'starting'
-            : 'unconfigured';
+          : state.vmStatus === 'STOPPING'
+            ? 'stopping'
+            : state.vmStatus === 'PROVISIONING' || state.vmStatus === 'STAGING' || state.vmStatus === 'RUNNING'
+              ? 'starting'
+              : 'unconfigured';
 
       return res.json({
         status: derivedStatus,
@@ -223,6 +236,7 @@ export function createControlPlaneApp(overrides = {}) {
 
   // Start session — auto-wakes GPU VM if asleep, then proxies start request
   app.post('/api/sessions/start', async (req, res) => {
+    lastSessionActivityAt = Date.now();
     try {
       const readyState = await vmController.ensureVmReady();
       const proxied = await proxyJsonToGpuVm(readyState.backendUrl, '/api/sessions/start', {
@@ -230,6 +244,9 @@ export function createControlPlaneApp(overrides = {}) {
         body: req.body,
         timeoutMs: 60_000,
       });
+      if (proxied.status === 201 || proxied.status === 200) {
+        lastSessionActivityAt = Date.now();
+      }
       return res.status(proxied.status).json(proxied.data);
     } catch (err) {
       const status = err.code === 'VM_WAKE_TIMEOUT' ? 504 : 502;
@@ -251,7 +268,33 @@ export function createControlPlaneApp(overrides = {}) {
         body: req.body,
         timeoutMs: 15_000,
       });
-      return res.status(proxied.status).json(proxied.data);
+
+      let vmStopped = false;
+      let vmStatus = state.vmStatus;
+      const remainingSessions = proxied.data?.activeSessions;
+      const shouldStopVm =
+        cfg.autoStopOnSessionEnd &&
+        vmController.vmControlEnabled &&
+        (remainingSessions === 0 || req.body?.stopVm === true);
+
+      if (shouldStopVm) {
+        try {
+          console.log(
+            `[ControlPlane] Session stopped with 0 remaining active sessions — auto-stopping GPU VM to save compute costs.`
+          );
+          const stopResult = await vmController.stopVm();
+          vmStopped = true;
+          vmStatus = stopResult?.vmStatus || 'STOPPING';
+        } catch (stopErr) {
+          console.warn(`[ControlPlane] Auto-stopping GPU VM on session end failed: ${stopErr.message}`);
+        }
+      }
+
+      return res.status(proxied.status).json({
+        ...proxied.data,
+        vmStopped,
+        vmStatus,
+      });
     } catch (err) {
       return res.status(502).json({
         error: 'GPU_VM_UNREACHABLE',
@@ -261,6 +304,7 @@ export function createControlPlaneApp(overrides = {}) {
   });
 
   app.post('/api/sessions/heartbeat', async (req, res) => {
+    lastSessionActivityAt = Date.now();
     try {
       const state = await vmController.getVmStatus();
       if (state.vmStatus !== 'RUNNING' || !state.backendUrl) {
@@ -282,6 +326,38 @@ export function createControlPlaneApp(overrides = {}) {
       });
     }
   });
+
+  // Background idle VM stopper — safely shuts down VM when 0 sessions run for >= autoStopVmIdleMs
+  let idleSweepTimer = null;
+  if (cfg.autoStopVmIdleMs > 0 && vmController.vmControlEnabled) {
+    idleSweepTimer = setInterval(async () => {
+      try {
+        const idleForMs = Date.now() - lastSessionActivityAt;
+        if (idleForMs < cfg.autoStopVmIdleMs) return;
+
+        const state = await vmController.getVmStatus();
+        if (state.vmStatus !== 'RUNNING' || !state.backendUrl) return;
+
+        const health = await vmController.probeBackendHealth(state.backendUrl, 2500);
+        if (health && health.activeSessions > 0) {
+          lastSessionActivityAt = Date.now();
+          return;
+        }
+
+        console.log(
+          `[ControlPlane] GPU VM idle with 0 active sessions for >= ${Math.round(cfg.autoStopVmIdleMs / 1000)}s — auto-stopping VM.`
+        );
+        await vmController.stopVm();
+        lastSessionActivityAt = Date.now();
+      } catch (err) {
+        console.warn(`[ControlPlane] Idle VM sweep check encountered error: ${err.message}`);
+      }
+    }, Math.min(cfg.autoStopVmIdleMs, 60_000));
+
+    if (typeof idleSweepTimer.unref === 'function') {
+      idleSweepTimer.unref();
+    }
+  }
 
   // Serve built React frontend (/client/dist)
   if (fs.existsSync(path.join(clientDistDir, 'index.html'))) {

@@ -6,6 +6,7 @@ import {
   fetchUserSession,
   startSession,
   stopSession,
+  stopVm,
   wakeVm,
 } from './lib/api';
 import type { CloudSession, Game, HealthStatus } from './types';
@@ -141,7 +142,7 @@ export function App() {
 
     const needsVmWake =
       health?.vmControlEnabled &&
-      (health.status === 'sleeping' || health.status === 'starting');
+      (health.status !== 'ok' || health.vmStatus !== 'RUNNING');
     const activeSteps = needsVmWake ? VM_WAKE_BOOT_STEPS : BOOT_STEPS;
     const offset = needsVmWake ? 1 : 0;
 
@@ -217,6 +218,15 @@ export function App() {
     await refreshHealth();
   };
 
+  const handleShutDownVm = async () => {
+    try {
+      await stopVm();
+      await refreshHealth();
+    } catch (err) {
+      console.warn('Failed to shut down GPU VM:', err);
+    }
+  };
+
   // Full-viewport streaming view
   if (activeStream) {
     return (
@@ -236,6 +246,7 @@ export function App() {
         nickname={nickname}
         onNicknameChange={setNickname}
         onLaunchDesktop={() => handleLaunch('desktop', 'Desktop / Steam Mode')}
+        onShutDownVm={handleShutDownVm}
         isBusy={bootState.open}
       />
 

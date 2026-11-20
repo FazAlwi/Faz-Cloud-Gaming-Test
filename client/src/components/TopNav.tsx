@@ -1,4 +1,4 @@
-import { Monitor, Server, User } from 'lucide-react';
+import { Monitor, Power, Server, User } from 'lucide-react';
 import type { HealthStatus } from '../types';
 
 interface TopNavProps {
@@ -7,6 +7,7 @@ interface TopNavProps {
   nickname: string;
   onNicknameChange: (value: string) => void;
   onLaunchDesktop: () => void;
+  onShutDownVm?: () => void;
   isBusy: boolean;
 }
 
@@ -16,6 +17,7 @@ export function TopNav({
   nickname,
   onNicknameChange,
   onLaunchDesktop,
+  onShutDownVm,
   isBusy,
 }: TopNavProps) {
   const active = health?.activeSessions ?? 0;
@@ -23,6 +25,14 @@ export function TopNav({
   const isFull = active >= maxSlots;
   const isVmSleeping = health?.status === 'sleeping';
   const isVmStarting = health?.status === 'starting';
+  const isVmStopping = health?.status === 'stopping' || health?.vmStatus === 'STOPPING';
+  const canShutDownVm = Boolean(
+    health?.vmControlEnabled &&
+      health?.vmStatus === 'RUNNING' &&
+      active === 0 &&
+      !isBusy &&
+      !isVmStopping
+  );
   const regionLabel = health?.regionLabel ?? 'Singapore';
   const regionCode = health?.region ?? 'asia-southeast1';
   const pingDisplay = latencyMs !== null ? `~${latencyMs}ms` : '~5ms';
@@ -78,9 +88,11 @@ export function TopNav({
                       ? 'GPU VM Sleeping (auto-wakes on Play)'
                       : isVmStarting
                         ? 'GPU VM Starting...'
-                        : health.mockDocker
-                          ? 'Mock Mode'
-                          : 'Live Docker'
+                        : isVmStopping
+                          ? 'GPU VM Stopping...'
+                          : health.mockDocker
+                            ? 'Mock Mode'
+                            : 'Live Docker'
                   }`
                 : 'Checking server capacity...'
             }
@@ -91,9 +103,11 @@ export function TopNav({
                   ? 'bg-[#64748B]'
                   : isVmStarting
                     ? 'animate-pulse bg-[#22D3EE]'
-                    : isVmSleeping || isFull
-                      ? 'bg-amber-400'
-                      : 'bg-emerald-400'
+                    : isVmStopping
+                      ? 'animate-pulse bg-amber-500'
+                      : isVmSleeping || isFull
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
               }`}
             />
             <Server className="hidden h-3.5 w-3.5 text-[#64748B] sm:block" />
@@ -102,9 +116,25 @@ export function TopNav({
                 ? 'GPU Asleep (Auto-Wake)'
                 : isVmStarting
                   ? 'Waking GPU VM...'
-                  : `${active} / ${maxSlots} Slots Active`}
+                  : isVmStopping
+                    ? 'Stopping GPU VM...'
+                    : `${active} / ${maxSlots} Slots Active`}
             </span>
           </div>
+
+          {canShutDownVm && onShutDownVm && (
+            <button
+              id="shutdown-vm-btn"
+              type="button"
+              disabled={isBusy || isVmStopping}
+              onClick={onShutDownVm}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-300 transition-colors hover:border-red-500/50 hover:bg-red-500/20 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Shut down the GPU virtual machine to eliminate compute charges"
+            >
+              <Power className="h-3.5 w-3.5 text-red-400" />
+              <span className="hidden lg:inline">Shut Down VM</span>
+            </button>
+          )}
 
           <label
             htmlFor="user-nickname-input"

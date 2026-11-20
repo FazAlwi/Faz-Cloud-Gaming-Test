@@ -77,10 +77,18 @@ export async function startSession(
   });
 }
 
-export async function stopSession(userId: string): Promise<{ stopped: boolean; releasedPort?: number }> {
+export async function stopSession(
+  userId: string,
+  options?: { stopVm?: boolean }
+): Promise<{
+  stopped: boolean;
+  releasedPort?: number;
+  activeSessions?: number;
+  vmStopped?: boolean;
+}> {
   return request('/api/sessions/stop', {
     method: 'POST',
-    body: JSON.stringify({ userId }),
+    body: JSON.stringify({ userId, stopVm: options?.stopVm }),
   });
 }
 
@@ -100,5 +108,14 @@ export async function wakeVm(): Promise<{
   return request('/api/vm/start', {
     method: 'POST',
     body: JSON.stringify({ wait: true }),
+  });
+}
+
+export async function stopVm(): Promise<{
+  ok: boolean;
+  vmStatus: string;
+}> {
+  return request('/api/vm/stop', {
+    method: 'POST',
   });
 }
