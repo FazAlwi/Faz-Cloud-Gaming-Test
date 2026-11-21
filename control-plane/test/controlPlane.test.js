@@ -102,10 +102,33 @@ test('control-plane serves catalog & sleeping health when GPU VM is TERMINATED, 
     ).json();
     assert.equal(sessionWhileAsleep.session, null);
 
-    // 2. Starting a session auto-wakes the VM and proxies POST /api/sessions/start
-    const startRes = await fetch(`${cpServer.baseUrl}/api/sessions/start`, {
+    // 2. Auth verify endpoint checks PIN
+    const authFail = await fetch(`${cpServer.baseUrl}/api/auth/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: 'wrongpin' }),
+    });
+    assert.equal(authFail.status, 401);
+
+    const authOk = await fetch(`${cpServer.baseUrl}/api/auth/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: '509014' }),
+    });
+    assert.equal(authOk.status, 200);
+
+    // 2a. Starting a session without PIN is blocked (401)
+    const unauthorizedStart = await fetch(`${cpServer.baseUrl}/api/sessions/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: 'player-1', gameId: 'desktop' }),
+    });
+    assert.equal(unauthorizedStart.status, 401);
+
+    // 2b. Starting a session with valid PIN auto-wakes the VM and proxies POST /api/sessions/start
+    const startRes = await fetch(`${cpServer.baseUrl}/api/sessions/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-access-pin': '509014' },
       body: JSON.stringify({ userId: 'player-1', gameId: 'desktop' }),
     });
     assert.equal(startRes.status, 201);
@@ -118,6 +141,7 @@ test('control-plane serves catalog & sleeping health when GPU VM is TERMINATED, 
     const awakeHealth = await (await fetch(`${cpServer.baseUrl}/api/health`)).json();
     assert.equal(awakeHealth.status, 'ok');
     assert.equal(awakeHealth.vmStatus, 'RUNNING');
+    assert.equal(awakeHealth.pinProtected, true);
 
     // 4. Fake endpoint for stopping session on GPU VM
     let gpuStopRemaining = 0;
@@ -141,7 +165,7 @@ test('control-plane serves catalog & sleeping health when GPU VM is TERMINATED, 
 
     const stopRes1 = await fetch(`${cpServer.baseUrl}/api/sessions/stop`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-access-pin': '509014' },
       body: JSON.stringify({ userId: 'player-1' }),
     });
     assert.equal(stopRes1.status, 200);
@@ -154,7 +178,7 @@ test('control-plane serves catalog & sleeping health when GPU VM is TERMINATED, 
     gpuStopRemaining = 0;
     const stopRes2 = await fetch(`${cpServer.baseUrl}/api/sessions/stop`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-access-pin': '509014' },
       body: JSON.stringify({ userId: 'player-2' }),
     });
     assert.equal(stopRes2.status, 200);
@@ -164,9 +188,15 @@ test('control-plane serves catalog & sleeping health when GPU VM is TERMINATED, 
     assert.equal(stopBody2.vmStatus, 'STOPPING');
     assert.equal(stopCalls, 1);
 
-    // 5. POST /api/vm/stop directly triggers VM shutdown
+    // 5. POST /api/vm/stop directly triggers VM shutdown (requires PIN)
+    const manualStopNoPin = await fetch(`${cpServer.baseUrl}/api/vm/stop`, {
+      method: 'POST',
+    });
+    assert.equal(manualStopNoPin.status, 401);
+
     const manualStopRes = await fetch(`${cpServer.baseUrl}/api/vm/stop`, {
       method: 'POST',
+      headers: { 'x-access-pin': '509014' },
     });
     assert.equal(manualStopRes.status, 200);
     assert.equal(stopCalls, 2);

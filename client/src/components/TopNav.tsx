@@ -1,4 +1,4 @@
-import { Monitor, Power, Server, User } from 'lucide-react';
+import { Lock, Monitor, Power, Server, User } from 'lucide-react';
 import type { HealthStatus } from '../types';
 
 interface TopNavProps {
@@ -8,6 +8,8 @@ interface TopNavProps {
   onNicknameChange: (value: string) => void;
   onLaunchDesktop: () => void;
   onShutDownVm?: () => void;
+  onOpenPinModal?: () => void;
+  hasPin?: boolean;
   isBusy: boolean;
 }
 
@@ -18,6 +20,8 @@ export function TopNav({
   onNicknameChange,
   onLaunchDesktop,
   onShutDownVm,
+  onOpenPinModal,
+  hasPin,
   isBusy,
 }: TopNavProps) {
   const active = health?.activeSessions ?? 0;
@@ -152,6 +156,23 @@ export function TopNav({
               className="w-24 bg-transparent text-xs font-medium text-[#F8FAFC] placeholder-[#64748B] focus:outline-none sm:w-28"
             />
           </label>
+
+          {onOpenPinModal && (
+            <button
+              id="pin-status-btn"
+              type="button"
+              onClick={onOpenPinModal}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                hasPin
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                  : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+              }`}
+              title={hasPin ? 'PIN Authenticated (509014)' : 'Enter Access PIN'}
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{hasPin ? 'PIN OK' : 'PIN'}</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

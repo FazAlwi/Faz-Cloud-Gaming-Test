@@ -4,6 +4,7 @@ import {
   fetchGames,
   fetchHealth,
   fetchUserSession,
+  getStoredPin,
   startSession,
   stopSession,
   stopVm,
@@ -14,6 +15,7 @@ import { TopNav } from './components/TopNav';
 import { GameLibrary } from './components/GameLibrary';
 import { BOOT_STEPS, SessionBootModal, VM_WAKE_BOOT_STEPS } from './components/SessionBootModal';
 import { StreamView } from './components/StreamView';
+import { PinModal } from './components/PinModal';
 
 const NICKNAME_STORAGE_KEY = 'fazcloud:nickname';
 const HEALTH_POLL_INTERVAL_MS = 10_000;
@@ -39,6 +41,11 @@ export function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [loadingGames, setLoadingGames] = useState<boolean>(true);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+
+  // Portal PIN state
+  const [pinModalOpen, setPinModalOpen] = useState<boolean>(false);
+  const [hasPin, setHasPin] = useState<boolean>(() => Boolean(getStoredPin()));
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
   // Active running session detected for this user (when in library) vs currently streaming
   const [existingSession, setExistingSession] = useState<CloudSession | null>(null);
@@ -128,6 +135,12 @@ export function App() {
   }, [nickname, refreshUserSession]);
 
   const handleLaunch = async (gameId: string | null, title: string) => {
+    if (health?.pinProtected && !getStoredPin()) {
+      setPendingAction(() => () => handleLaunch(gameId, title));
+      setPinModalOpen(true);
+      return;
+    }
+
     const trimmedUser = nickname.trim();
     if (trimmedUser.length < 2) {
       setBootState({
@@ -193,6 +206,13 @@ export function App() {
       setBootState({ open: false, title: '', step: 0, steps: BOOT_STEPS, error: null });
       refreshHealth();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setHasPin(false);
+        setBootState({ open: false, title: '', step: 0, steps: BOOT_STEPS, error: null });
+        setPendingAction(() => () => handleLaunch(gameId, title));
+        setPinModalOpen(true);
+        return;
+      }
       const message =
         err instanceof ApiError
           ? err.message
@@ -219,11 +239,32 @@ export function App() {
   };
 
   const handleShutDownVm = async () => {
+    if (health?.pinProtected && !getStoredPin()) {
+      setPendingAction(() => () => handleShutDownVm());
+      setPinModalOpen(true);
+      return;
+    }
     try {
       await stopVm();
       await refreshHealth();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setHasPin(false);
+        setPendingAction(() => () => handleShutDownVm());
+        setPinModalOpen(true);
+        return;
+      }
       console.warn('Failed to shut down GPU VM:', err);
+    }
+  };
+
+  const handlePinSuccess = () => {
+    setHasPin(true);
+    setPinModalOpen(false);
+    if (pendingAction) {
+      const action = pendingAction;
+      setPendingAction(null);
+      action();
     }
   };
 
@@ -247,6 +288,8 @@ export function App() {
         onNicknameChange={setNickname}
         onLaunchDesktop={() => handleLaunch('desktop', 'Desktop / Steam Mode')}
         onShutDownVm={handleShutDownVm}
+        onOpenPinModal={() => setPinModalOpen(true)}
+        hasPin={hasPin}
         isBusy={bootState.open}
       />
 
@@ -273,6 +316,15 @@ export function App() {
           }
         />
       )}
+
+      <PinModal
+        isOpen={pinModalOpen}
+        onClose={() => {
+          setPinModalOpen(false);
+          setPendingAction(null);
+        }}
+        onSuccess={handlePinSuccess}
+      />
     </div>
   );
 }

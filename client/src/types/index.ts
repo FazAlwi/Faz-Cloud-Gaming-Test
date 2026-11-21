@@ -21,6 +21,7 @@ export interface HealthStatus {
   uptimeSeconds: number;
   vmStatus?: string;
   vmControlEnabled?: boolean;
+  pinProtected?: boolean;
 }
 
 export interface CloudSession {

@@ -34,6 +34,10 @@ export function createControlPlaneApp(overrides = {}) {
       overrides.autoStopOnSessionEnd ?? parseBool(process.env.AUTO_STOP_ON_SESSION_END, true),
     autoStopVmIdleMs:
       overrides.autoStopVmIdleMs ?? parseIntOrDefault(process.env.AUTO_STOP_VM_IDLE_MS, 600_000),
+    portalAccessPin:
+      overrides.portalAccessPin !== undefined
+        ? overrides.portalAccessPin
+        : (process.env.PORTAL_ACCESS_PIN || '509014').trim(),
   };
 
   const vmController =
@@ -51,6 +55,35 @@ export function createControlPlaneApp(overrides = {}) {
 
   const app = express();
   app.use(express.json());
+
+  function requireAccessPin(req, res, next) {
+    if (!cfg.portalAccessPin) return next();
+    const pin = String(
+      req.headers['x-access-pin'] ||
+      req.body?.accessPin ||
+      req.body?.pin ||
+      ''
+    ).trim();
+    if (pin === cfg.portalAccessPin) {
+      return next();
+    }
+    return res.status(401).json({
+      error: 'UNAUTHORIZED',
+      message: 'Access PIN required to control GPU VM and start sessions.',
+    });
+  }
+
+  app.post('/api/auth/verify', (req, res) => {
+    const pin = String(req.body?.pin || req.headers['x-access-pin'] || '').trim();
+    if (cfg.portalAccessPin && pin !== cfg.portalAccessPin) {
+      return res.status(401).json({
+        ok: false,
+        error: 'INVALID_PIN',
+        message: 'Incorrect access PIN. Please enter the valid PIN to proceed.',
+      });
+    }
+    return res.json({ ok: true, message: 'Authenticated successfully.' });
+  });
 
   async function proxyJsonToGpuVm(backendUrl, reqPath, { method = 'GET', body, timeoutMs = 30_000 } = {}) {
     const controller = new AbortController();
@@ -99,7 +132,7 @@ export function createControlPlaneApp(overrides = {}) {
     }
   });
 
-  app.post('/api/vm/start', async (req, res) => {
+  app.post('/api/vm/start', requireAccessPin, async (req, res) => {
     try {
       const waitForReady = req.body?.wait !== false;
       if (waitForReady) {
@@ -128,7 +161,7 @@ export function createControlPlaneApp(overrides = {}) {
     }
   });
 
-  app.post('/api/vm/stop', async (_req, res) => {
+  app.post('/api/vm/stop', requireAccessPin, async (_req, res) => {
     try {
       const result = await vmController.stopVm();
       return res.json({
@@ -154,6 +187,7 @@ export function createControlPlaneApp(overrides = {}) {
             ...backendHealth,
             vmStatus: 'RUNNING',
             vmControlEnabled: vmController.vmControlEnabled,
+            pinProtected: Boolean(cfg.portalAccessPin),
           });
         }
       }
@@ -180,6 +214,7 @@ export function createControlPlaneApp(overrides = {}) {
         uptimeSeconds: Math.floor(process.uptime()),
         vmStatus: state.vmStatus,
         vmControlEnabled: vmController.vmControlEnabled,
+        pinProtected: Boolean(cfg.portalAccessPin),
       });
     } catch (err) {
       return res.json({
@@ -195,6 +230,7 @@ export function createControlPlaneApp(overrides = {}) {
         uptimeSeconds: Math.floor(process.uptime()),
         vmStatus: 'UNKNOWN',
         vmControlEnabled: vmController.vmControlEnabled,
+        pinProtected: Boolean(cfg.portalAccessPin),
         error: err.message,
       });
     }
@@ -257,7 +293,7 @@ export function createControlPlaneApp(overrides = {}) {
   });
 
   // Start session — auto-wakes GPU VM if asleep, then proxies start request
-  app.post('/api/sessions/start', async (req, res) => {
+  app.post('/api/sessions/start', requireAccessPin, async (req, res) => {
     lastSessionActivityAt = Date.now();
     try {
       const readyState = await vmController.ensureVmReady();
@@ -279,7 +315,7 @@ export function createControlPlaneApp(overrides = {}) {
     }
   });
 
-  app.post('/api/sessions/stop', async (req, res) => {
+  app.post('/api/sessions/stop', requireAccessPin, async (req, res) => {
     try {
       const state = await vmController.getVmStatus();
       if (state.vmStatus !== 'RUNNING' || !state.backendUrl) {

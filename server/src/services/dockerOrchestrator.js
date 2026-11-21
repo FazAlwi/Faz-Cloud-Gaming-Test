@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -83,12 +84,29 @@ export class DockerOrchestrator {
       '#!/usr/bin/with-contenv bash',
       'set -euo pipefail',
       '',
+      '# Ensure NVIDIA Vulkan ICD exists so Vulkan initializes on NVIDIA GPUs',
+      'mkdir -p /etc/vulkan/icd.d /usr/share/vulkan/icd.d',
+      'if [ ! -f /etc/vulkan/icd.d/nvidia_icd.json ] && [ ! -f /usr/share/vulkan/icd.d/nvidia_icd.json ]; then',
+      `  cat <<'ICD' > /etc/vulkan/icd.d/nvidia_icd.json`,
+      '{',
+      '    "file_format_version" : "1.0.0",',
+      '    "ICD": {',
+      '        "library_path": "libGLX_nvidia.so.0",',
+      '        "api_version" : "1.3"',
+      '    }',
+      '}',
+      'ICD',
+      'fi',
+      'if [ -f /etc/vulkan/icd.d/nvidia_icd.json ] && [ ! -f /usr/share/vulkan/icd.d/nvidia_icd.json ]; then',
+      '  cp -f /etc/vulkan/icd.d/nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json 2>/dev/null || true',
+      'fi',
+      '',
       `AUTOSTART_CONTENT=$(cat <<'EOF'`,
       MANAGED_AUTOSTART_MARKER,
-      'export __NV_PRIME_RENDER_OFFLOAD=1',
+      '# Disable X11 mouse acceleration curves for 1:1 linear mouse tracking',
+      'xset m 1/1 0 2>/dev/null || true',
+      '',
       'export __GLX_VENDOR_LIBRARY_NAME=nvidia',
-      'export __VK_LAYER_NV_optimus=NVIDIA_only',
-      'export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json:/etc/vulkan/icd.d/nvidia_icd.json',
       'export PROTON_ENABLE_NVAPI=1',
       'export PROTON_HIDE_NVIDIA_GPU=0',
       'export DXVK_ENABLE_NVAPI=1',
@@ -196,6 +214,7 @@ export class DockerOrchestrator {
     includeDri = true,
     includeNvidiaModeset = false,
     includeUinput = false,
+    dockerRuntime = null,
   }) {
     const safeUserId = sanitizeUserId(userId);
     if (!safeUserId) {
@@ -277,14 +296,12 @@ export class DockerOrchestrator {
         'NVIDIA_DRIVER_CAPABILITIES=all,graphics,utility,compute,video,display',
         'NVIDIA_VISIBLE_DEVICES=all',
         `AUTO_GPU=${resolvedAutoGpu}`,
-        '__NV_PRIME_RENDER_OFFLOAD=1',
         '__GLX_VENDOR_LIBRARY_NAME=nvidia',
-        '__VK_LAYER_NV_optimus=NVIDIA_only',
-        'VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json:/etc/vulkan/icd.d/nvidia_icd.json',
         'PROTON_ENABLE_NVAPI=1',
         'PROTON_HIDE_NVIDIA_GPU=0',
         'DXVK_ENABLE_NVAPI=1',
         'SELKIES_VIDEO_STREAMING_MODE=true',
+        'SELKIES_RAW_MOUSE=true',
         `SELKIES_ENCODER=${config.selkiesEncoder}`,
         `SELKIES_VIDEO_BITRATE=${config.selkiesVideoBitrate}`,
         `SELKIES_FRAMERATE=${config.selkiesFramerate}`,
@@ -308,6 +325,7 @@ export class DockerOrchestrator {
         'cloud-gaming.game-id': game.id,
       },
       HostConfig: {
+        ...(dockerRuntime ? { Runtime: dockerRuntime } : {}),
         // Required on Ubuntu 24.04 so Steam's bubblewrap sandbox runs natively instead of proot-bwrap
         SecurityOpt: ['seccomp=unconfined', 'apparmor=unconfined'],
         // Explicitly pass all GPU capabilities required for Vulkan / 3D gaming + NVENC encoding
@@ -416,6 +434,18 @@ export class DockerOrchestrator {
     // Remove any stale container with the same name before launching
     await this.removeExistingContainerByName(containerName);
 
+    try {
+      execSync('nvidia-modprobe --modeset 2>/dev/null || true');
+    } catch (_) {}
+
+    let dockerRuntime = null;
+    try {
+      const dockerInfo = await this.docker.info();
+      if (dockerInfo?.Runtimes && dockerInfo.Runtimes.nvidia) {
+        dockerRuntime = 'nvidia';
+      }
+    } catch (_) {}
+
     const containerConfig = this.buildContainerConfig({
       userId: safeUserId,
       sessionId,
@@ -428,6 +458,7 @@ export class DockerOrchestrator {
       includeDri: fs.existsSync('/dev/dri'),
       includeNvidiaModeset: fs.existsSync('/dev/nvidia-modeset'),
       includeUinput: fs.existsSync('/dev/uinput'),
+      dockerRuntime,
     });
 
     const container = await this.docker.createContainer(containerConfig);

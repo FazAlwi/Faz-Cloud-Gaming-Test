@@ -12,6 +12,28 @@ const API_BASE =
     ? configuredApiBase
     : '';
 
+const PIN_STORAGE_KEY = 'fazcloud:access_pin';
+
+export function getStoredPin(): string {
+  try {
+    return window.localStorage.getItem(PIN_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setStoredPin(pin: string): void {
+  try {
+    if (pin && pin.trim()) {
+      window.localStorage.setItem(PIN_STORAGE_KEY, pin.trim());
+    } else {
+      window.localStorage.removeItem(PIN_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export class ApiError extends Error {
   status: number;
   code: string;
@@ -25,9 +47,11 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const pin = getStoredPin();
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...(pin ? { 'x-access-pin': pin } : {}),
       ...(init?.headers || {}),
     },
     ...init,
@@ -42,6 +66,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
   return data as T;
+}
+
+export async function verifyPin(pin: string): Promise<{ ok: boolean; message?: string }> {
+  return request<{ ok: boolean; message?: string }>('/api/auth/verify', {
+    method: 'POST',
+    headers: { 'x-access-pin': pin.trim() },
+    body: JSON.stringify({ pin: pin.trim() }),
+  });
 }
 
 export async function fetchHealth(): Promise<{ health: HealthStatus; latencyMs: number }> {

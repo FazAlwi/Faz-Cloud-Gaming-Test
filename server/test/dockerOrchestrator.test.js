@@ -74,18 +74,12 @@ test('passes NVIDIA zero-copy NVENC env vars, /dev/dri device, GPU DeviceRequest
   );
   assert.ok(containerConfig.Env.includes('NVIDIA_VISIBLE_DEVICES=all'));
   assert.ok(containerConfig.Env.includes('AUTO_GPU=nvidia'));
-  assert.ok(containerConfig.Env.includes('__NV_PRIME_RENDER_OFFLOAD=1'));
   assert.ok(containerConfig.Env.includes('__GLX_VENDOR_LIBRARY_NAME=nvidia'));
-  assert.ok(containerConfig.Env.includes('__VK_LAYER_NV_optimus=NVIDIA_only'));
-  assert.ok(
-    containerConfig.Env.includes(
-      'VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json:/etc/vulkan/icd.d/nvidia_icd.json'
-    )
-  );
   assert.ok(containerConfig.Env.includes('PROTON_ENABLE_NVAPI=1'));
   assert.ok(containerConfig.Env.includes('PROTON_HIDE_NVIDIA_GPU=0'));
   assert.ok(containerConfig.Env.includes('DXVK_ENABLE_NVAPI=1'));
   assert.ok(containerConfig.Env.includes('SELKIES_VIDEO_STREAMING_MODE=true'));
+  assert.ok(containerConfig.Env.includes('SELKIES_RAW_MOUSE=true'));
   assert.ok(
     containerConfig.Env.some((entry) => entry.startsWith('SELKIES_ENCODER=')),
     'SELKIES_ENCODER env should be set'
@@ -159,6 +153,16 @@ test('passes NVIDIA zero-copy NVENC env vars, /dev/dri device, GPU DeviceRequest
     ),
     '/dev/uinput should be mounted when present on host'
   );
+
+  const runtimeConfig = orchestrator.buildContainerConfig({
+    userId: 'alice',
+    sessionId: 'sess_runtime',
+    game,
+    hostPort: 8081,
+    udpRange: orchestrator.computeWebRtcUdpRange(8081),
+    dockerRuntime: 'nvidia',
+  });
+  assert.equal(runtimeConfig.HostConfig.Runtime, 'nvidia');
 });
 
 test('mounts /srv/saves/${safeUserId} to /config:rw and optional shared read-only game library', () => {
@@ -222,8 +226,10 @@ test('injects /custom-cont-init.d/ auto-launch script for Steam games and falls 
     assert.ok(preparedGame.initScriptHostPath && fs.existsSync(preparedGame.initScriptHostPath));
 
     const scriptContent = fs.readFileSync(preparedGame.initScriptHostPath, 'utf8');
-    assert.ok(scriptContent.includes('export __NV_PRIME_RENDER_OFFLOAD=1'));
-    assert.ok(scriptContent.includes('export VK_DRIVER_FILES='));
+    assert.ok(scriptContent.includes('mkdir -p /etc/vulkan/icd.d'));
+    assert.ok(scriptContent.includes('libGLX_nvidia.so.0'));
+    assert.ok(scriptContent.includes('xset m 1/1 0'));
+    assert.ok(scriptContent.includes('export __GLX_VENDOR_LIBRARY_NAME=nvidia'));
     assert.ok(scriptContent.includes(`-bigpicture "steam://rungameid/${game.steamAppId}"`));
     assert.ok(scriptContent.includes(`steam -bigpicture "steam://rungameid/${game.steamAppId}"`));
     assert.ok(scriptContent.includes('/defaults/autostart'));
