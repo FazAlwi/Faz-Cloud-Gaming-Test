@@ -15,6 +15,19 @@ function parseContainerPort(value, fallback = 3001) {
   return parsed === 3000 || parsed === 3001 ? parsed : fallback;
 }
 
+function normalizeSelkiesEncoder(value, fallback = 'h264enc') {
+  const trimmed = (value || '').trim();
+  if (!trimmed) return fallback;
+  // Map legacy selkies-gstreamer encoder names to Selkies 2.x / Pixelflux hardware codec names
+  if (trimmed.toLowerCase() === 'nvh264enc' || trimmed.toLowerCase() === 'x264enc') {
+    return 'h264enc';
+  }
+  if (trimmed.toLowerCase() === 'nvh265enc' || trimmed.toLowerCase() === 'x265enc') {
+    return 'h265enc';
+  }
+  return trimmed;
+}
+
 const rawStreamProtocol = (process.env.STREAM_PROTOCOL || '').trim();
 const rawGamesBaseDir = process.env.GAMES_BASE_DIR;
 
@@ -40,10 +53,12 @@ export const config = {
   dockerSocketPath: process.env.DOCKER_SOCKET_PATH || '/var/run/docker.sock',
   selkiesImage: process.env.SELKIES_IMAGE || 'lscr.io/linuxserver/steam:latest',
   selkiesContainerPort: parseContainerPort(process.env.SELKIES_CONTAINER_PORT, 3001),
-  selkiesEncoder: process.env.SELKIES_ENCODER || 'nvh264enc',
-  selkiesVideoBitrate: parseIntOrDefault(process.env.SELKIES_VIDEO_BITRATE, 12000),
+  selkiesEncoder: normalizeSelkiesEncoder(process.env.SELKIES_ENCODER, 'h264enc'),
+  selkiesVideoBitrate: parseIntOrDefault(process.env.SELKIES_VIDEO_BITRATE, 20000),
+  selkiesVideoCrf: parseIntOrDefault(process.env.SELKIES_VIDEO_CRF, 18),
+  selkiesVideoPaintoverCrf: parseIntOrDefault(process.env.SELKIES_VIDEO_PAINTOVER_CRF, 15),
   selkiesFramerate: parseIntOrDefault(process.env.SELKIES_FRAMERATE, 60),
-  pixelfluxWayland: parseBool(process.env.PIXELFLUX_WAYLAND, false),
+  pixelfluxWayland: parseBool(process.env.PIXELFLUX_WAYLAND, true),
   autoGpu: (process.env.AUTO_GPU || '').trim(),
   protonVersion: process.env.PROTON_VERSION || 'GE-Proton9',
   puid: parseIntOrDefault(process.env.PUID, 1000),

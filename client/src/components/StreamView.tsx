@@ -150,7 +150,7 @@ export function StreamView({ session, initialLatencyMs, onEndSession }: StreamVi
       <div
         id="hud-hover-trigger"
         onMouseEnter={revealHud}
-        className="fixed top-0 left-1/2 z-40 flex h-5 w-80 -translate-x-1/2 items-start justify-center pt-1.5"
+        className="fixed top-0 left-1/2 z-40 flex h-4 w-48 -translate-x-1/2 items-start justify-center pt-1"
       >
         {!hudVisible && (
           <span
@@ -184,6 +184,19 @@ export function StreamView({ session, initialLatencyMs, onEndSession }: StreamVi
           <span>{pingMs}ms</span>
           <span className="text-[#475569]">·</span>
           <span>{fps} FPS</span>
+        </div>
+
+        <span className="hidden h-3.5 w-px bg-[#1E293B] sm:block" aria-hidden="true" />
+
+        {/* Gaming Mode / Pointer Lock shortcut hint */}
+        <div
+          className="hidden items-center gap-1.5 px-1 text-[11px] text-[#94A3B8] sm:flex"
+          title="Press Ctrl+Shift+G (or click the Crosshair icon in the left Selkies sidebar) to lock mouse for 3D camera control. Hold Esc to unlock."
+        >
+          <span className="text-[#22D3EE] font-medium">3D Mouse Lock:</span>
+          <kbd className="rounded bg-[#1E293B] px-1.5 py-0.5 font-mono text-[10px] text-[#F8FAFC]">
+            Ctrl+Shift+G
+          </kbd>
         </div>
 
         <span className="h-3.5 w-px bg-[#1E293B]" aria-hidden="true" />

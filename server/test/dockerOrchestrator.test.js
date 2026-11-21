@@ -78,12 +78,12 @@ test('passes NVIDIA zero-copy NVENC env vars, /dev/dri device, GPU DeviceRequest
   assert.ok(containerConfig.Env.includes('PROTON_ENABLE_NVAPI=1'));
   assert.ok(containerConfig.Env.includes('PROTON_HIDE_NVIDIA_GPU=0'));
   assert.ok(containerConfig.Env.includes('DXVK_ENABLE_NVAPI=1'));
+  assert.ok(containerConfig.Env.includes('NO_DECOR=true'));
   assert.ok(containerConfig.Env.includes('SELKIES_VIDEO_STREAMING_MODE=true'));
-  assert.ok(containerConfig.Env.includes('SELKIES_RAW_MOUSE=true'));
-  assert.ok(
-    containerConfig.Env.some((entry) => entry.startsWith('SELKIES_ENCODER=')),
-    'SELKIES_ENCODER env should be set'
-  );
+  assert.ok(containerConfig.Env.includes('SELKIES_RAW_POINTER_MOTION=true'));
+  assert.ok(containerConfig.Env.includes('SELKIES_PUBLISH_INPUT_DEVICES=true'));
+  assert.ok(containerConfig.Env.includes('SELKIES_ENCODER=h264enc'));
+  assert.ok(containerConfig.Env.includes('SELKIES_VIDEO_CRF=18'));
 
   assert.deepEqual(containerConfig.HostConfig.SecurityOpt, [
     'seccomp=unconfined',
@@ -135,7 +135,7 @@ test('passes NVIDIA zero-copy NVENC env vars, /dev/dri device, GPU DeviceRequest
     ),
     '/dev/nvidia-modeset should be mounted when present on host'
   );
-  assert.ok(nvidiaModesetOnlyConfig.Env.includes('PIXELFLUX_WAYLAND=false'));
+  assert.ok(nvidiaModesetOnlyConfig.Env.includes('PIXELFLUX_WAYLAND=true'));
   assert.ok(nvidiaModesetOnlyConfig.Env.includes('AUTO_GPU=true'));
 
   const uinputConfig = orchestrator.buildContainerConfig({
@@ -228,6 +228,8 @@ test('injects /custom-cont-init.d/ auto-launch script for Steam games and falls 
     const scriptContent = fs.readFileSync(preparedGame.initScriptHostPath, 'utf8');
     assert.ok(scriptContent.includes('mkdir -p /etc/vulkan/icd.d'));
     assert.ok(scriptContent.includes('libGLX_nvidia.so.0'));
+    assert.ok(scriptContent.includes('"MouseWarpOverride"="force"'));
+    assert.ok(scriptContent.includes('1920x1080'));
     assert.ok(scriptContent.includes('xset m 1/1 0'));
     assert.ok(scriptContent.includes('export __GLX_VENDOR_LIBRARY_NAME=nvidia'));
     assert.ok(scriptContent.includes(`-bigpicture "steam://rungameid/${game.steamAppId}"`));
@@ -235,6 +237,12 @@ test('injects /custom-cont-init.d/ auto-launch script for Steam games and falls 
     assert.ok(scriptContent.includes('/defaults/autostart'));
     assert.ok(scriptContent.includes('/config/.config/openbox/autostart'));
     assert.ok(scriptContent.includes('/config/.config/labwc/autostart'));
+
+    const palworldScript = orchestrator.buildAutoLaunchScript('1623730');
+    assert.ok(palworldScript.includes('GameUserSettings.ini'));
+    assert.ok(palworldScript.includes('sg.ResolutionQuality=100.000000'));
+    assert.ok(palworldScript.includes('ResolutionSizeX=1920'));
+    assert.ok(palworldScript.includes('GraphicsLevel=High'));
 
     const mode = fs.statSync(preparedGame.initScriptHostPath).mode & 0o777;
     assert.equal(mode, 0o755, 'init script must be executable for LinuxServer init-custom-files');
